@@ -52,6 +52,8 @@ gui:
 	@if [ -z "$$DISPLAY" ]; then echo "Sem DISPLAY: corre 'make gui' no host (ou entra com 'vagrant ssh -- -X')."; exit 1; fi
 	@/opt/core/venv/bin/python -c "from core.api.grpc import client; c=client.CoreGrpcClient(); c.connect(); exit(0 if any(s.id==$(SESSAO) for s in c.get_sessions()) else 1)" \
 		|| $(MAKE) --no-print-directory topologia
+	@command -v xterm >/dev/null || sudo apt-get install -y -q xterm
+	@/opt/core/venv/bin/python scripts/gui_config.py
 	core-gui -s $(SESSAO)
 
 limpar:

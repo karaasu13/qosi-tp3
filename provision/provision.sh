@@ -19,7 +19,7 @@ apt-get install -y -q -o Dpkg::Progress-Fancy=0 \
   iproute2 ethtool nftables iputils-ping tcpdump tshark \
   openvswitch-switch docker.io \
   iperf3 irtt hping3 nmap python3-scapy \
-  xauth x11-apps \
+  xauth x11-apps xterm \
   "linux-modules-extra-$(uname -r)" || \
 apt-get install -y -qq git make curl python3 python3-pip python3-venv iproute2 ethtool \
   nftables iputils-ping tcpdump openvswitch-switch docker.io iperf3 irtt hping3 nmap \

@@ -26,21 +26,24 @@ No `core.conf` fica `ovs = 1`, por isso os switches do CORE (incluindo os criado
 ```bash
 git clone git@github.com:karaasu13/qosi-tp3.git
 cd qosi-tp3
-vagrant up                       # ~10 min na 1.ª vez
-vagrant ssh -c "cd /vagrant && make verificar && make teste"
+make up                          # = vagrant up (~10 min na 1.ª vez)
+make verificar teste
 ```
 
 Com pouca RAM: `QOSI_MEM=3072 QOSI_CPUS=2 vagrant up`.
 
 ### No dia a dia
 
+O `Makefile` funciona no host e na VM: no host cada comando é corrido dentro da VM por `vagrant ssh`, por isso não é preciso entrar nela.
+
 ```bash
-vagrant ssh
-cd /vagrant
 make            # lista os comandos
+make topologia  # cria a topologia completa e testa
+make gui        # abre o core-gui no teu ecrã, já dentro da sessão
+make parar
 ```
 
-O GUI do CORE abre no ecrã do host com `vagrant ssh -- -X` e depois `core-gui`.
+O `make gui` usa X11 por SSH: no host é preciso ter o `xauth` (Arch: `xorg-xauth`) e um servidor X (XWayland serve).
 
 ## Cadeia mínima (validação de 16 nov)
 
@@ -100,7 +103,7 @@ atacante  ─┘  core   borda                    gargalo 10 Mbit/s    └─ cl
 
 No fim corre um auto-teste: pings dos clientes a todos os servidores, contadores das 4 VNFs (confirma o caminho em cada sentido) e iperf3 a passar no gargalo.
 
-**Ver no GUI:** `vagrant ssh -- -X`, depois `core-gui` → *Session → Sessions* → sessão 10 → *Join*. Dá para abrir terminais nos nós (duplo clique) e correr `tcpdump`, `ping`, `iperf3`, etc.
+**Ver no GUI:** `make gui` (cria a sessão se ainda não existir e entra nela). Dá para abrir terminais nos nós (duplo clique) e correr `tcpdump`, `ping`, `iperf3`, etc.
 
 **Desligar:** `make parar`.
 

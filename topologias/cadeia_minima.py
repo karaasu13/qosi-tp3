@@ -60,7 +60,7 @@ def construir(session, imagem: str):
 
     dopts = DockerNode.create_options()
     dopts.image = imagem
-    dopts.services = []  # sem serviços do CORE (ex.: DefaultRoute) dentro da VNF
+    dopts.model = ""  # modelo sem serviços por omissão (ex.: DefaultRoute) na VNF
     vnf = session.add_node(DockerNode, name="vnf1", position=Position(x=400, y=350),
                            options=dopts)
 

@@ -76,13 +76,43 @@ CADEIA MÍNIMA: OK
 
 A topologia fica guardada em `resultados/cadeia_minima.xml` e pode abrir-se no GUI.
 
+## Topologia completa
+
+`make topologia` cria no `core-daemon` a topologia da proposta e deixa-a a correr (sessão 10):
+
+```
+srv-voip  ─┐                                                       ┌─ cli-voip
+srv-video ─┤                    nó de serviço (ovs-sn)             ├─ cli-video
+srv-web   ─┼─ r1 ── r2 ── [ fw → cl → po → sc ] ══ sw-acesso ──────┼─ cli-web
+atacante  ─┘  core   borda                    gargalo 10 Mbit/s    └─ cli-bulk1..3
+```
+
+| Rede | Endereços |
+|---|---|
+| Servidores (uma sub-rede cada, r1 = .1) | srv-voip 10.1.1.10, srv-video 10.1.2.10, srv-web 10.1.3.10, atacante 10.1.9.66 |
+| r1 ↔ r2 | 10.255.0.1/30 ↔ 10.255.0.2/30 |
+| Acesso (r2 = gateway 10.0.0.1) | cli-voip .11, cli-video .12, cli-web .13, cli-bulk1–3 .21–.23 |
+
+- **Descendente** (servidores → clientes): r2 → fw → cl → po → sc → gargalo.
+- **Ascendente**: gargalo → cl → fw → r2 (sem policiamento nem agendamento).
+- As VNFs estão em **modo transparente** (`vnf-transparente`, dentro da imagem). Cada função entra por cima disto, com filtros `tc` de preferência < 100 ou regras `nft`.
+- O gargalo é um FIFO (`tbf`) de 10 Mbit/s nos dois sentidos, com fila de ~150 ms (configuração C0).
+
+No fim corre um auto-teste: pings dos clientes a todos os servidores, contadores das 4 VNFs (confirma o caminho em cada sentido) e iperf3 a passar no gargalo.
+
+**Ver no GUI:** `vagrant ssh -- -X`, depois `core-gui` → *Session → Sessions* → sessão 10 → *Join*. Dá para abrir terminais nos nós (duplo clique) e correr `tcpdump`, `ping`, `iperf3`, etc.
+
+**Desligar:** `make parar`.
+
+> Nota: num switch OVS com as duas interfaces de uma VNF transparente, as regras OpenFlow têm de estar instaladas **antes** de a VNF começar a reencaminhar; com a regra NORMAL por omissão forma-se um ciclo L2. O script já faz isso por essa ordem.
+
 ## Estrutura
 
 ```
 Vagrantfile               VM Ubuntu 24.04
 provision/provision.sh    instala CORE, OVS, Docker, ferramentas e módulos do kernel
-vnf/Dockerfile            imagem base das VNFs (qosi/vnf)
-topologias/               scripts do CORE (API Python)
+vnf/                      imagem base das VNFs (qosi/vnf) e vnf-transparente
+topologias/               cadeia_minima.py (validação) e topologia.py (topologia completa)
 scripts/                  verificação do ambiente e utilitários
 docs/                     proposta e notas
 ```

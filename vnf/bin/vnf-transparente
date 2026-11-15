@@ -1,0 +1,19 @@
+#!/bin/sh
+# Põe a VNF em modo transparente L2: o que entra em eth0 sai em eth1 e vice-versa.
+# É a base de todas as VNFs; cada função (firewall, classifier, ...) acrescenta
+# as suas regras com preferência mais baixa (pref < 100) antes deste reencaminhamento.
+# Idempotente: pode correr-se várias vezes.
+set -e
+for i in eth0 eth1; do
+  ethtool -K "$i" gro off gso off tso off 2>/dev/null || true
+  ip link set "$i" up promisc on
+  tc qdisc replace dev "$i" clsact
+done
+tc filter del dev eth0 ingress pref 100 2>/dev/null || true
+tc filter del dev eth1 ingress pref 100 2>/dev/null || true
+# "u32 match u32 0 0" apanha tudo, incluindo ARP
+tc filter add dev eth0 ingress pref 100 protocol all u32 match u32 0 0 \
+  action mirred egress redirect dev eth1
+tc filter add dev eth1 ingress pref 100 protocol all u32 match u32 0 0 \
+  action mirred egress redirect dev eth0
+echo "vnf-transparente: eth0 <-> eth1 ativo"

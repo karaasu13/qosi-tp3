@@ -9,5 +9,5 @@ RUN apt-get update -qq && apt-get install -y -qq --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # agente Python de cada VNF (a acrescentar): /opt/vnf/agente.py
-WORKDIR /opt/vnf
+# Sem WORKDIR: o CORE escreve ficheiros com caminhos relativos à raiz do contentor.
 CMD ["tail", "-f", "/dev/null"]

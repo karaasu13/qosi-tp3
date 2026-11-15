@@ -7,9 +7,14 @@ CORE_VERSAO="9.2.1"
 CORE_DEB="core_${CORE_VERSAO}_amd64.deb"
 CORE_URL="https://github.com/coreemu/core/releases/download/release-${CORE_VERSAO}/${CORE_DEB}"
 
-echo ">>> pacotes base"
-apt-get update -qq
-apt-get install -y -qq \
+echo ">>> desligar atualizações automáticas (prendem o apt no 1.º arranque)"
+systemctl disable --now unattended-upgrades apt-daily.timer apt-daily-upgrade.timer 2>/dev/null || true
+pkill -f unattended-upgrade 2>/dev/null || true
+while command -v fuser >/dev/null && fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do echo "à espera do lock do apt..."; sleep 5; done
+
+echo ">>> pacotes base (5-15 min)"
+apt-get update -q
+apt-get install -y -q -o Dpkg::Progress-Fancy=0 \
   git make curl ca-certificates python3 python3-pip python3-venv \
   iproute2 ethtool nftables iputils-ping tcpdump tshark \
   openvswitch-switch docker.io \
@@ -43,7 +48,8 @@ echo ">>> CORE ${CORE_VERSAO}"
 if ! dpkg -s core >/dev/null 2>&1; then
   cd /tmp
   curl -fsSL -o "${CORE_DEB}" "${CORE_URL}"
-  apt-get install -y -qq "./${CORE_DEB}"
+  echo "    (instala o ambiente Python do CORE, demora uns minutos)"
+  apt-get install -y -q "./${CORE_DEB}"
 fi
 # switches do CORE (também no GUI) passam a ser bridges OVS
 grep -q '^ovs *=' /opt/core/etc/core.conf || echo "ovs = 1" >> /opt/core/etc/core.conf

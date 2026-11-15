@@ -60,6 +60,7 @@ def construir(session, imagem: str):
 
     dopts = DockerNode.create_options()
     dopts.image = imagem
+    dopts.services = []  # sem serviços do CORE (ex.: DefaultRoute) dentro da VNF
     vnf = session.add_node(DockerNode, name="vnf1", position=Position(x=400, y=350),
                            options=dopts)
 
@@ -128,12 +129,15 @@ def testar(ovs, srv, cli, vnf, p: dict, tem_dscp: bool) -> list:
     res = []
     br = ovs.brname
 
+    antes = pacotes_tc(vnf, "eth0", 100), pacotes_tc(vnf, "eth1", 100)
     ok = ping(cli, "10.0.0.1")
     res.append(("ping cli → srv através da VNF", ok, ""))
 
-    n_desc, n_asc = pacotes_tc(vnf, "eth0", 100), pacotes_tc(vnf, "eth1", 100)
+    n_desc = pacotes_tc(vnf, "eth0", 100) - antes[0]
+    n_asc = pacotes_tc(vnf, "eth1", 100) - antes[1]
     res.append(("tráfego atravessa a VNF (contadores tc)", n_desc > 0 and n_asc > 0,
-                f"eth0→eth1: {n_desc} pkts, eth1→eth0: {n_asc} pkts"))
+                f"durante o ping: eth0→eth1 {n_desc} pkts, eth1→eth0 {n_asc} pkts; "
+                f"antes do ping já havia {antes[0]}/{antes[1]}"))
 
     # DSCP: srv envia UDP com TOS 0, cli deve receber com TOS 0xb8 (EF)
     if tem_dscp:

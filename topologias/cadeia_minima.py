@@ -195,8 +195,11 @@ def main() -> int:
         session.instantiate()
         p = {k: ofport(i.name) for k, i in ifs.items()}
         print(f"bridge {ovs.brname}  portas OpenFlow: {p}")
-        tem_dscp = configurar_vnf(vnf)
+        # regras OpenFlow ANTES de ligar o reencaminhamento na VNF: com a regra
+        # NORMAL por omissão do OVS, eth0 e eth1 da VNF no mesmo switch formam um
+        # ciclo L2 e qualquer broadcast (ARP, IPv6 ND) gera uma tempestade.
         regras_cadeia(ovs.brname, p)
+        tem_dscp = configurar_vnf(vnf)
         time.sleep(1)
 
         resultados = testar(ovs, srv, cli, vnf, p, tem_dscp)

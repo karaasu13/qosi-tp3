@@ -1,0 +1,9 @@
+.vagrant/
+*.log
+__pycache__/
+*.pyc
+.venv/
+resultados/
+*.pcap
+*.pcapng
+docs/*.pdf

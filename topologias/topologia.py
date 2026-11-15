@@ -21,12 +21,13 @@ Uso (na VM, com o core-daemon ativo):
 
 import argparse
 import re
-import subprocess
 import sys
 import time
 
 from core.api.grpc import client
 from core.api.grpc.wrappers import Interface, NodeType, Position
+
+from ovs_util import desligar_ipv6_host, limpar_macs, ptp_como_fios, sh, short_id
 
 SESSAO = 10
 IMAGEM_VNF = "qosi/vnf:latest"
@@ -52,17 +53,6 @@ VNFS = ["fw", "cl", "po", "sc"]
 # portas do switch do nó de serviço: id da interface no ovs-sn
 PORTA = {"r2": 0, "fw0": 1, "fw1": 2, "cl0": 3, "cl1": 4,
          "po0": 5, "po1": 6, "sc0": 7, "sc1": 8, "acesso": 9}
-
-
-def sh(cmd: str, check: bool = True) -> str:
-    r = subprocess.run(cmd, shell=True, text=True, capture_output=True)
-    if check and r.returncode:
-        raise RuntimeError(f"{cmd}: {r.stderr.strip()}")
-    return r.stdout.strip()
-
-
-def short_id(sid: int) -> str:
-    return f"{(sid >> 8) ^ (sid & 0xFF):x}"
 
 
 def iface(i: int, ip: str = None, mask: int = 24, nome: str = None) -> Interface:
@@ -176,11 +166,16 @@ def configurar(core):
     # rotas estáticas nos routers
     cmd(core, "r1", "ip route replace 10.0.0.0/24 via 10.255.0.2")
     cmd(core, "r2", "ip route replace default via 10.255.0.1")
+    # host: sem IPv6 nas interfaces do CORE e bridges ptp como fios (ver ovs_util)
+    desligar_ipv6_host(SESSAO)
+    ptp_como_fios(SESSAO)
     # regras OpenFlow ANTES de ligar as VNFs (evita ciclos L2 no ovs-sn)
     p = regras_cadeia()
     for v in VNFS:
         cmd(core, v, "vnf-transparente")
     configurar_gargalo()
+    # esquece MACs aprendidos durante o arranque, antes de haver cadeia
+    limpar_macs(bridge("sw-acesso"))
     return p
 
 
@@ -199,9 +194,12 @@ def testar(core) -> list:
     res = []
     time.sleep(2)
     antes = {v: (pacotes(core, v, "eth0"), pacotes(core, v, "eth1")) for v in VNFS}
-    for cli in ("cli-voip", "cli-bulk3"):
-        for srv, (rede, host, _) in SERVIDORES.items():
-            res.append((f"ping {cli} → {srv}", ping(core, cli, f"{rede}.{host}"), ""))
+    # todos os clientes chegam a todos os servidores (o bug de MACs afetava só alguns)
+    for cli in CLIENTES:
+        falhas = [srv for srv, (rede, host, _) in SERVIDORES.items()
+                  if not ping(core, cli, f"{rede}.{host}")]
+        res.append((f"ping {cli} → servidores e atacante", not falhas,
+                    f"falhou: {', '.join(falhas)}" if falhas else ""))
     desc = {v: pacotes(core, v, "eth0") - antes[v][0] for v in VNFS}
     asc = {v: pacotes(core, v, "eth1") - antes[v][1] for v in VNFS}
     res.append(("descendente passa por fw→cl→po→sc", all(desc[v] > 0 for v in VNFS),

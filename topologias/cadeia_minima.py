@@ -33,6 +33,8 @@ from core.nodes.base import CoreNode, Position
 from core.nodes.docker import DockerNode
 from core.nodes.network import SwitchNode
 
+from ovs_util import desligar_ipv6_host, ptp_como_fios
+
 RAIZ = Path(__file__).resolve().parent.parent
 DSCP_EF_TOS = 0xB8  # DSCP 46 << 2
 PORTA_EF = 7000
@@ -195,6 +197,8 @@ def main() -> int:
         session.instantiate()
         p = {k: ofport(i.name) for k, i in ifs.items()}
         print(f"bridge {ovs.brname}  portas OpenFlow: {p}")
+        desligar_ipv6_host(session.id)
+        ptp_como_fios(session.id)
         # regras OpenFlow ANTES de ligar o reencaminhamento na VNF: com a regra
         # NORMAL por omissão do OVS, eth0 e eth1 da VNF no mesmo switch formam um
         # ciclo L2 e qualquer broadcast (ARP, IPv6 ND) gera uma tempestade.

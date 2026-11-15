@@ -104,7 +104,9 @@ No fim corre um auto-teste: pings dos clientes a todos os servidores, contadores
 
 **Desligar:** `make parar`.
 
-> Nota: num switch OVS com as duas interfaces de uma VNF transparente, as regras OpenFlow têm de estar instaladas **antes** de a VNF começar a reencaminhar; com a regra NORMAL por omissão forma-se um ciclo L2. O script já faz isso por essa ordem.
+> Notas sobre VNFs transparentes no CORE (o script já trata disto, em `topologias/ovs_util.py`):
+> - As regras OpenFlow têm de estar instaladas **antes** de a VNF começar a reencaminhar; com a regra NORMAL por omissão, as duas interfaces da VNF no mesmo switch formam um ciclo L2.
+> - O CORE liga cada interface ao switch através de uma bridge ptp intermédia que aprende MACs. Se um MAC for aprendido do lado errado (o que acontecia no arranque com o IPv6 dos clientes), essa bridge passa a deitar fora o tráfego para esse cliente. Por isso as bridges ptp passam a "fios" (porta A ⇄ porta B) e o IPv6 é desligado nas interfaces do host e dentro das VNFs.
 
 ## Estrutura
 

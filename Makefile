@@ -2,10 +2,7 @@
 # (vagrant ssh), por isso basta "make topologia" ou "make gui" na pasta do repo.
 PY := sudo /opt/core/venv/bin/python
 SESSAO := 10
-TARGETS := ajuda verificar imagem teste manter topologia parar gui cenario baseline limpar
-CONFIG ?= C0
-DURACAO ?= 30
-REP ?= 1
+TARGETS := ajuda verificar imagem teste manter topologia parar gui limpar
 
 ifneq ($(shell hostname),qosi-tp3)
 # ---------------------------------------------------------------- no host
@@ -16,7 +13,7 @@ up:
 	vagrant up
 
 $(TARGETS):
-	@vagrant ssh -c "cd /vagrant && make $@ $(MAKEOVERRIDES)"
+	@vagrant ssh -c "cd /vagrant && make $@"
 
 else
 # ---------------------------------------------------------------- na VM
@@ -30,8 +27,6 @@ ajuda:
 	@echo "make topologia  - topologia completa no core-daemon (fica ligada)"
 	@echo "make gui        - abre o core-gui já na sessão $(SESSAO) (cria-a se não existir)"
 	@echo "make parar      - apaga a sessão da topologia"
-	@echo "make cenario    - tráfego das 4 classes e medição (CONFIG=C0|C1 DURACAO=30 REP=1)"
-	@echo "make baseline   - cenário em C0 e C1 seguidos, com tabela comparativa"
 	@echo "make limpar     - remove sessões/contentores/bridges que tenham ficado"
 	@echo "(no host: 'make up' cria/arranca a VM)"
 
@@ -55,20 +50,11 @@ parar:
 
 gui:
 	@if [ -z "$$DISPLAY" ]; then echo "Sem DISPLAY: corre 'make gui' no host (ou entra com 'vagrant ssh -- -X')."; exit 1; fi
-	@$(TOPOLOGIA_LIGADA) || $(MAKE) --no-print-directory topologia
+	@/opt/core/venv/bin/python -c "from core.api.grpc import client; c=client.CoreGrpcClient(); c.connect(); exit(0 if any(s.id==$(SESSAO) for s in c.get_sessions()) else 1)" \
+		|| $(MAKE) --no-print-directory topologia
 	@command -v xterm >/dev/null || sudo apt-get install -y -q xterm
 	@/opt/core/venv/bin/python scripts/gui_config.py
 	core-gui -s $(SESSAO)
-
-TOPOLOGIA_LIGADA = /opt/core/venv/bin/python -c "from core.api.grpc import client; c=client.CoreGrpcClient(); c.connect(); exit(0 if any(s.id==$(SESSAO) for s in c.get_sessions()) else 1)"
-
-cenario:
-	@$(TOPOLOGIA_LIGADA) || $(MAKE) --no-print-directory topologia
-	$(PY) testes/trafego.py --config $(CONFIG) --duracao $(DURACAO) --repeticoes $(REP)
-
-baseline:
-	@$(TOPOLOGIA_LIGADA) || $(MAKE) --no-print-directory topologia
-	$(PY) testes/trafego.py --config C0,C1 --duracao $(DURACAO) --repeticoes $(REP)
 
 limpar:
 	-sudo /opt/core/venv/bin/core-cleanup

@@ -111,32 +111,6 @@ No fim corre um auto-teste: pings dos clientes a todos os servidores, contadores
 > - As regras OpenFlow têm de estar instaladas **antes** de a VNF começar a reencaminhar; com a regra NORMAL por omissão, as duas interfaces da VNF no mesmo switch formam um ciclo L2.
 > - O CORE liga cada interface ao switch através de uma bridge ptp intermédia que aprende MACs. Se um MAC for aprendido do lado errado (o que acontecia no arranque com o IPv6 dos clientes), essa bridge passa a deitar fora o tráfego para esse cliente. Por isso as bridges ptp passam a "fios" (porta A ⇄ porta B) e o IPv6 é desligado nas interfaces do host e dentro das VNFs.
 
-## Tráfego e medição (baselines C0/C1)
-
-`make cenario` (ou `make baseline` para C0 e C1 seguidos) lança as 4 classes ao mesmo tempo, todas no sentido descendente, e mede cada uma:
-
-| Classe | Origem → destino | Ferramenta | Métricas |
-|---|---|---|---|
-| VoIP | srv-voip → cli-voip | `irtt`, 20 ms / 172 B | atraso num sentido p50/p95/p99, jitter, perdas |
-| Vídeo | srv-video → cli-video | `iperf3` TCP a 4 Mbit/s | débito, retransmissões |
-| Web | srv-web → cli-web | `curl` de 100 KB a cada 0,5 s | tempo de resposta p50/p95 |
-| Bulk | srv-web → cli-bulk1–3 | `iperf3` TCP, 2 fluxos cada | débito total, equidade (Jain) |
-
-Também regista a fila do gargalo a cada 0,2 s (ocupação em ms e descartes). Os nós partilham o relógio da VM, por isso o atraso num só sentido do `irtt` é exato.
-
-| Config | Gargalo |
-|---|---|
-| C0 | HTB 10 Mbit/s + FIFO longa (~150 ms), sem QoS |
-| C1 | HTB 10 Mbit/s + `fq_codel` |
-
-```bash
-make baseline                         # C0 e C1, 30 s cada
-make baseline DURACAO=60 REP=5        # o que a proposta diz para os resultados finais
-make cenario CONFIG=C1 DURACAO=60
-```
-
-Os resultados ficam em `resultados/<data>/`: `resumo.csv` (uma linha por execução), `fila.csv` e os JSON de cada ferramenta. No fim aparece uma tabela comparativa.
-
 ## Estrutura
 
 ```
@@ -144,7 +118,6 @@ Vagrantfile               VM Ubuntu 24.04
 provision/provision.sh    instala CORE, OVS, Docker, ferramentas e módulos do kernel
 vnf/                      imagem base das VNFs (qosi/vnf) e vnf-transparente
 topologias/               cadeia_minima.py (validação) e topologia.py (topologia completa)
-testes/                   gerador de tráfego e medição (trafego.py)
 scripts/                  verificação do ambiente e utilitários
 docs/                     proposta e notas
 ```

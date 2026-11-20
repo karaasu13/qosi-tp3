@@ -153,13 +153,28 @@ def regras_cadeia() -> dict:
     return p
 
 
-def configurar_gargalo(kbit: int = GARGALO_KBIT, buffer_ms: int = GARGALO_BUFFER_MS):
-    """FIFO (tbf) nos dois sentidos da ligação de acesso."""
-    limite = int(kbit * 1000 / 8 * buffer_ms / 1000)  # bytes em fila
-    for dev in (porta("ovs-sn", PORTA["acesso"]), porta("sw-acesso", 0)):
+def gargalo_devs() -> list:
+    """Interfaces do gargalo: [descendente (ovs-sn → acesso), ascendente (sw-acesso → ovs-sn)]."""
+    return [porta("ovs-sn", PORTA["acesso"]), porta("sw-acesso", 0)]
+
+
+def configurar_gargalo(modo: str = "C0", kbit: int = GARGALO_KBIT,
+                       buffer_ms: int = GARGALO_BUFFER_MS) -> None:
+    """Gargalo de `kbit` nos dois sentidos: HTB a limitar o débito e, por baixo,
+    a disciplina de fila que muda entre configurações.
+
+    C0: FIFO longa (bfifo de `buffer_ms`), sem QoS  -> bufferbloat
+    C1: fq_codel (AQM) no lugar da FIFO
+    """
+    limite = int(kbit * 1000 / 8 * buffer_ms / 1000)  # bytes
+    folha = {"C0": f"bfifo limit {limite}", "C1": "fq_codel"}[modo]
+    for dev in gargalo_devs():
         sh(f"ethtool -K {dev} gro off gso off tso off", check=False)
-        sh(f"tc qdisc replace dev {dev} root tbf rate {kbit}kbit "
-           f"burst 15k limit {limite}")
+        sh(f"tc qdisc del dev {dev} root", check=False)
+        sh(f"tc qdisc add dev {dev} root handle 1: htb default 1")
+        sh(f"tc class add dev {dev} parent 1: classid 1:1 htb rate {kbit}kbit "
+           f"ceil {kbit}kbit burst 15k cburst 15k")
+        sh(f"tc qdisc add dev {dev} parent 1:1 handle 10: {folha}")
 
 
 def configurar(core):

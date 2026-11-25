@@ -1,0 +1,40 @@
+#!/bin/sh
+# VNF 3 — Policer: token bucket (tc police) por classe, no sentido descendente.
+#
+#   EF  (VoIP)  acima de EF_RATE        -> descartado
+#   AF41 (vídeo) acima de VIDEO_RATE    -> remarcado AF42 (continua, sem reordenar)
+#   LE  (bulk)  acima de BULK_CLIENTE   -> descartado, por cliente (equidade)
+#
+# Os valores são os iniciais da proposta e podem mudar-se por variável de
+# ambiente (o controlador vai alterá-los em tempo real).
+set -e
+. /usr/local/bin/vnf-comum.sh
+EF_RATE=${EF_RATE:-1mbit}
+VIDEO_RATE=${VIDEO_RATE:-5mbit}
+BULK_CLIENTE=${BULK_CLIENTE:-3mbit}
+CLIENTES_BULK=${CLIENTES_BULK:-"10.0.0.21 10.0.0.22 10.0.0.23"}
+
+limpar
+base
+encaminhar_tc
+
+# EF: excesso descartado (police: exceed=drop, conform=pipe -> mirred)
+tc filter add dev eth0 ingress pref 10 protocol ip flower ip_tos $TOS_EF/0xfc \
+  action police rate "$EF_RATE" burst 15k conform-exceed drop/pipe \
+  action mirred egress redirect dev eth1
+
+# AF41: dentro do débito segue; o excesso "continua" para o filtro 21, que o remarca AF42
+tc filter add dev eth0 ingress pref 20 protocol ip flower ip_tos $TOS_AF41/0xfc \
+  action police rate "$VIDEO_RATE" burst 30k conform-exceed continue/pipe \
+  action mirred egress redirect dev eth1
+remarcar eth0 21 $TOS_AF42 eth1 ip_tos $TOS_AF41/0xfc
+
+# LE: limite por cliente
+p=30
+for c in $CLIENTES_BULK; do
+  tc filter add dev eth0 ingress pref $p protocol ip flower ip_tos $TOS_LE/0xfc dst_ip "$c" \
+    action police rate "$BULK_CLIENTE" burst 30k conform-exceed drop/pipe \
+    action mirred egress redirect dev eth1
+  p=$((p + 1))
+done
+echo "vnf-policer: EF<=$EF_RATE, AF41<=$VIDEO_RATE (excesso->AF42), LE<=$BULK_CLIENTE/cliente"

@@ -2,7 +2,7 @@
 # (vagrant ssh), por isso basta "make topologia" ou "make gui" na pasta do repo.
 PY := sudo /opt/core/venv/bin/python
 SESSAO := 10
-TARGETS := ajuda verificar imagem teste manter topologia parar gui cenario baseline limpar
+TARGETS := ajuda verificar imagem teste manter topologia parar gui cenario baseline cadeia transparente e1 monitor limpar
 CONFIG ?= C0
 DURACAO ?= 30
 REP ?= 1
@@ -32,6 +32,10 @@ ajuda:
 	@echo "make parar      - apaga a sessão da topologia"
 	@echo "make cenario    - tráfego das 4 classes e medição (CONFIG=C0|C1 DURACAO=30 REP=1)"
 	@echo "make baseline   - cenário em C0 e C1 seguidos, com tabela comparativa"
+	@echo "make cadeia     - VNFs com as funções ligadas (firewall, classifier, policer, scheduler)"
+	@echo "make transparente - VNFs só a reencaminhar (como em C0/C1)"
+	@echo "make e1         - teste funcional de cada VNF (VNF=fw,cl,po,sc)"
+	@echo "make monitor    - exportador de métricas em http://<vm>:9101/metrics"
 	@echo "make limpar     - remove sessões/contentores/bridges que tenham ficado"
 	@echo "(no host: 'make up' cria/arranca a VM)"
 
@@ -69,6 +73,22 @@ cenario:
 baseline:
 	@$(TOPOLOGIA_LIGADA) || $(MAKE) --no-print-directory topologia
 	$(PY) testes/trafego.py --config C0,C1 --duracao $(DURACAO) --repeticoes $(REP)
+
+VNF ?= fw,cl,po,sc
+
+cadeia:
+	@$(TOPOLOGIA_LIGADA) || $(MAKE) --no-print-directory topologia
+	$(PY) topologias/topologia.py --modo cadeia
+
+transparente:
+	$(PY) topologias/topologia.py --modo transparente
+
+e1: imagem
+	@$(TOPOLOGIA_LIGADA) || $(MAKE) --no-print-directory topologia
+	$(PY) testes/e1.py --vnf $(VNF)
+
+monitor:
+	$(PY) monitor/exportador.py
 
 limpar:
 	-sudo /opt/core/venv/bin/core-cleanup

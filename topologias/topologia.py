@@ -22,6 +22,7 @@ Uso (na VM, com o core-daemon ativo):
 import argparse
 import re
 import sys
+from pathlib import Path
 import time
 
 from core.api.grpc import client
@@ -186,12 +187,33 @@ def configurar(core):
     ptp_como_fios(SESSAO)
     # regras OpenFlow ANTES de ligar as VNFs (evita ciclos L2 no ovs-sn)
     p = regras_cadeia()
-    for v in VNFS:
-        cmd(core, v, "vnf-transparente")
+    aplicar_modo(core, "transparente")
     configurar_gargalo()
     # esquece MACs aprendidos durante o arranque, antes de haver cadeia
     limpar_macs(bridge("sw-acesso"))
     return p
+
+
+# módulos do kernel de que as VNFs precisam (os contentores não os podem carregar)
+MODULOS = ["nf_conntrack_bridge", "br_netfilter", "sch_htb", "sch_fq_codel", "cls_flower",
+           "cls_u32", "act_mirred", "act_pedit", "act_csum", "act_police", "act_gact"]
+SCRIPT_VNF = {"fw": "vnf-firewall", "cl": "vnf-classifier",
+              "po": "vnf-policer", "sc": "vnf-scheduler"}
+
+
+def aplicar_modo(core, modo: str) -> None:
+    """transparente: as VNFs só reencaminham (C0, C1).
+    cadeia: cada VNF faz a sua função (C2)."""
+    if modo == "cadeia":
+        for m in MODULOS:
+            sh(f"modprobe {m}", check=False)
+    # copia os scripts atuais para dentro das VNFs (evita recriar a topologia
+    # sempre que uma VNF muda)
+    bin_vnf = Path(__file__).resolve().parent.parent / "vnf" / "bin"
+    for v in VNFS:
+        sh(f"docker cp {bin_vnf}/. {v}:/usr/local/bin/", check=False)
+    for v in VNFS:
+        cmd(core, v, SCRIPT_VNF[v] if modo == "cadeia" else "vnf-transparente")
 
 
 def pacotes(core, vnf: str, dev: str) -> int:
@@ -243,6 +265,8 @@ def main() -> int:
     ap.add_argument("--parar", action="store_true", help="apaga a sessão")
     ap.add_argument("--sem-teste", action="store_true")
     ap.add_argument("--imagem", default="qosi/vnf:latest", help="imagem Docker das VNFs")
+    ap.add_argument("--modo", choices=["transparente", "cadeia"],
+                    help="só muda o modo das VNFs numa sessão já ligada")
     a = ap.parse_args()
     IMAGEM_VNF = a.imagem
 
@@ -251,6 +275,11 @@ def main() -> int:
     if a.parar:
         ok = any(s.id == SESSAO for s in core.get_sessions()) and core.delete_session(SESSAO)
         print(f"sessão {SESSAO} apagada" if ok else f"sessão {SESSAO} não existia")
+        return 0
+
+    if a.modo:
+        aplicar_modo(core, a.modo)
+        print(f"VNFs em modo {a.modo}")
         return 0
 
     print("a criar a sessão no core-daemon...")

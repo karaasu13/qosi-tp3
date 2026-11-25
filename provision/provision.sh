@@ -28,6 +28,8 @@ apt-get install -y -qq git make curl python3 python3-pip python3-venv iproute2 e
 echo ">>> módulos do kernel usados pelas VNFs"
 cat > /etc/modules-load.d/qosi.conf <<'EOF'
 openvswitch
+nf_conntrack_bridge
+br_netfilter
 sch_htb
 sch_fq_codel
 sch_gred

@@ -35,6 +35,7 @@ for f in "protocol ip flower ip_proto udp action pass" \
   DESC="tc $nome"; r sh -c "tc filter add dev qv1 ingress $f && tc filter del dev qv1 ingress"
 done
 DESC="nftables (inet, conntrack)"; r sh -c "nft add table inet qosi_t && nft add chain inet qosi_t c '{ type filter hook forward priority 0; }' && nft add rule inet qosi_t c ct state established accept && nft delete table inet qosi_t"
+DESC="nftables bridge com conntrack (firewall)"; r sh -c "modprobe nf_conntrack_bridge; nft add table bridge qosi_b && nft add chain bridge qosi_b f '{ type filter hook forward priority 0; }' && nft add rule bridge qosi_b f ct state established accept && nft delete table bridge qosi_b"
 DESC="OVS com datapath do kernel"; r sh -c "ovs-vsctl add-br qosi-t && ovs-vsctl del-br qosi-t"
 ip link del qv0 2>/dev/null
 

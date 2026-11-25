@@ -1,0 +1,38 @@
+#!/bin/sh
+# VNF 4 — Scheduler: HTB na saída para o gargalo (eth1), ligeiramente abaixo
+# da capacidade da ligação, para a fila se formar aqui e não no gargalo.
+#
+#   1:10 EF    rate 1 Mbit  ceil 1 Mbit   prio 0  pfifo curta (prioridade estrita)
+#   1:20 AF4x  rate 5 Mbit  ceil total    prio 1  fq_codel   (AF41 e AF42 na mesma fila)
+#   1:30 BE    rate 2 Mbit  ceil total    prio 2  fq_codel   (classe por omissão)
+#   1:40 LE    rate 0,5     ceil total    prio 3  fq_codel   (usa o que sobrar)
+#
+# Nota: separar AF41/AF42 por precedência de descarte exigiria GRED com o
+# qdisc dsmark, que saiu do kernel Linux na 6.3; AF42 fica como marca.
+set -e
+. /usr/local/bin/vnf-comum.sh
+TOTAL=${TOTAL:-9500kbit}
+EF=${EF:-1mbit} AF4=${AF4:-5mbit} BE=${BE:-2mbit} LE=${LE:-500kbit}
+
+limpar
+base
+encaminhar_tc
+
+D=eth1
+tc qdisc add dev $D root handle 1: htb default 30
+tc class add dev $D parent 1:  classid 1:1  htb rate "$TOTAL" ceil "$TOTAL" burst 15k cburst 15k
+tc class add dev $D parent 1:1 classid 1:10 htb rate "$EF"  ceil "$EF"    prio 0 burst 15k
+tc class add dev $D parent 1:1 classid 1:20 htb rate "$AF4" ceil "$TOTAL" prio 1 burst 15k
+tc class add dev $D parent 1:1 classid 1:30 htb rate "$BE"  ceil "$TOTAL" prio 2 burst 15k
+tc class add dev $D parent 1:1 classid 1:40 htb rate "$LE"  ceil "$TOTAL" prio 3 burst 15k
+tc qdisc add dev $D parent 1:10 handle 10: pfifo limit 30
+tc qdisc add dev $D parent 1:20 handle 20: fq_codel
+tc qdisc add dev $D parent 1:30 handle 30: fq_codel
+tc qdisc add dev $D parent 1:40 handle 40: fq_codel
+
+f() { tc filter add dev $D parent 1: protocol ip prio "$1" flower ip_tos "$2/0xfc" classid "$3"; }
+f 1 $TOS_EF   1:10
+f 2 $TOS_AF41 1:20
+f 3 $TOS_AF42 1:20
+f 4 $TOS_LE   1:40
+echo "vnf-scheduler: HTB $TOTAL (EF $EF, AF4 $AF4, BE $BE, LE $LE)"

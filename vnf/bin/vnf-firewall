@@ -1,0 +1,45 @@
+#!/bin/sh
+# VNF 1 — Firewall: nftables com estado (conntrack), política por omissão drop.
+#
+# As outras VNFs reencaminham com tc, mas o tc corre antes do netfilter e
+# esconderia os pacotes do nftables. Por isso a firewall liga eth0 e eth1 numa
+# bridge Linux (br0) e filtra na família "bridge", que tem conntrack
+# (módulo nf_conntrack_bridge, carregado no host pela topologia).
+#
+# Regras:
+#   - ARP passa;
+#   - tráfego de ligações já estabelecidas (ou relacionadas) passa;
+#   - novas ligações só se começarem do lado dos clientes (eth1, 10.0.0.0/24);
+#   - tudo o resto é bloqueado (p. ex. o atacante a tentar chegar aos clientes).
+set -e
+. /usr/local/bin/vnf-comum.sh
+REDE_CLIENTES=${REDE_CLIENTES:-10.0.0.0/24}
+
+limpar
+base
+ip link add br0 type bridge stp_state 0
+ip link set br0 type bridge ageing_time 30000 2>/dev/null || true
+for i in eth0 eth1; do ip link set "$i" master br0; done
+ip link set br0 up
+# a bridge não deve passar pelo iptables (br_netfilter), só pelo nftables
+sysctl -qw net.bridge.bridge-nf-call-iptables=0 2>/dev/null || true
+sysctl -qw net.bridge.bridge-nf-call-ip6tables=0 2>/dev/null || true
+
+nft -f - <<EOF
+table bridge fw {
+  counter estabelecidas {}
+  counter novas_clientes {}
+  counter invalidos {}
+  counter bloqueados {}
+
+  chain forward {
+    type filter hook forward priority 0; policy drop;
+    ether type arp accept
+    ct state established,related counter name estabelecidas accept
+    ct state invalid counter name invalidos drop
+    iifname "eth1" ip saddr $REDE_CLIENTES ct state new counter name novas_clientes accept
+    counter name bloqueados drop
+  }
+}
+EOF
+echo "vnf-firewall: nftables (bridge, conntrack) ativo"

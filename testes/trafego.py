@@ -39,7 +39,11 @@ WEB_OBJ_KB = 100
 DESCRICAO = {
     "C0": "sem QoS, FIFO longa (150 ms)",
     "C1": "AQM (fq_codel) no gargalo",
+    "C2": "cadeia de VNFs, parâmetros estáticos (gargalo como C0)",
 }
+# configuração -> (fila do gargalo, modo das VNFs)
+CONFIG = {"C0": ("C0", "transparente"), "C1": ("C1", "transparente"),
+          "C2": ("C0", "cadeia")}
 
 
 # ------------------------------------------------------------------ nós
@@ -92,7 +96,8 @@ def preparar_servidores(nos: Nos, d: Path) -> None:
     web = d / "web"
     web.mkdir()
     (web / "obj.bin").write_bytes(b"\0" * WEB_OBJ_KB * 1024)
-    nos.fundo("srv-voip", f"irtt server -b {IP['srv-voip']}:2112")
+    # -i 0: sem intervalo mínimo (o E1 do policer manda a cada 1 ms)
+    nos.fundo("srv-voip", f"irtt server -i 0 -b {IP['srv-voip']}:2112")
     nos.cmd("srv-video", "iperf3 -s -p 5201 -D")
     for k in range(3):
         nos.cmd("srv-web", f"iperf3 -s -p {5202 + k} -D")
@@ -101,7 +106,9 @@ def preparar_servidores(nos: Nos, d: Path) -> None:
 
 
 def correr(nos: Nos, config: str, duracao: int, d: Path) -> dict:
-    topo.configurar_gargalo(config)
+    fila_cfg, modo = CONFIG[config]
+    topo.configurar_gargalo(fila_cfg)
+    topo.aplicar_modo(nos.core, modo)
     preparar_servidores(nos, d)
     fila = AmostradorFila(topo.gargalo_devs()[0])
     fila.start()
@@ -232,7 +239,7 @@ def tabela(res: dict) -> str:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[1])
-    ap.add_argument("--config", default="C0", help="C0, C1 ou lista (C0,C1)")
+    ap.add_argument("--config", default="C0", help="C0, C1, C2 ou lista (C0,C1,C2)")
     ap.add_argument("--duracao", type=int, default=30, help="segundos de medição")
     ap.add_argument("--repeticoes", type=int, default=1)
     a = ap.parse_args()
@@ -250,15 +257,18 @@ def main() -> int:
 
     base = RAIZ / "resultados" / datetime.now().strftime("%Y%m%d-%H%M%S")
     res = {c: [] for c in configs}
-    for c in configs:
-        print(f"{c}: {DESCRICAO[c]}")
-        for r in range(1, a.repeticoes + 1):
-            d = base / f"{c}_r{r}"
-            d.mkdir(parents=True)
-            m = correr(nos, c, a.duracao, d)
-            (d / "metricas.json").write_text(json.dumps(m, indent=2))
-            res[c].append(m)
-    topo.configurar_gargalo("C0")  # deixa a topologia como estava
+    try:
+        for c in configs:
+            print(f"{c}: {DESCRICAO[c]}")
+            for r in range(1, a.repeticoes + 1):
+                d = base / f"{c}_r{r}"
+                d.mkdir(parents=True)
+                m = correr(nos, c, a.duracao, d)
+                (d / "metricas.json").write_text(json.dumps(m, indent=2))
+                res[c].append(m)
+    finally:
+        topo.configurar_gargalo("C0")  # deixa a topologia como estava
+        topo.aplicar_modo(core, "transparente")
 
     # CSV com uma linha por execução
     chaves = sorted({k for runs in res.values() for m in runs for k in m})

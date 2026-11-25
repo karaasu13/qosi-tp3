@@ -137,14 +137,38 @@ make cenario CONFIG=C1 DURACAO=60
 
 Os resultados ficam em `resultados/<data>/`: `resumo.csv` (uma linha por execução), `fila.csv` e os JSON de cada ferramenta. No fim aparece uma tabela comparativa.
 
+## VNFs (configuração C2)
+
+`make cadeia` liga as funções nas 4 VNFs (`make transparente` volta a pô-las só a reencaminhar). Cada função é um script dentro da imagem (`vnf/bin/`), copiado para os contentores sempre que se muda de modo, por isso não é preciso recriar a topologia quando uma VNF é alterada.
+
+| VNF | Script | O que faz | Valores iniciais |
+|---|---|---|---|
+| fw | `vnf-firewall` | bridge `br0` + nftables (família bridge, conntrack), política drop: só passam ligações começadas pelos clientes e as respostas | rede dos clientes 10.0.0.0/24 |
+| cl | `vnf-classifier` | `tc flower` + `pedit`: DSCP pela origem (VoIP→EF, vídeo→AF41, web→BE, bulk→LE); apaga o DSCP marcado pelos hosts | — |
+| po | `vnf-policer` | `tc police`: EF acima do débito é descartado; excesso de vídeo remarcado AF42; bulk limitado por cliente | EF 1 Mbit/s, vídeo 5 Mbit/s, bulk 3 Mbit/s/cliente |
+| sc | `vnf-scheduler` | HTB a 9,5 Mbit/s na saída para o gargalo: EF prioritário, AF4 5 Mbit/s, BE 2 Mbit/s, LE 0,5 Mbit/s, todos com empréstimo | — |
+
+Os valores podem mudar-se por variável de ambiente (p. ex. `EF_RATE=2mbit vnf-policer` dentro do contentor); é por aí que o controlador vai atuar.
+
+> A firewall usa uma bridge em vez de `tc mirred` porque o `tc` corre antes do netfilter e o nftables nunca veria os pacotes. Separar AF41 de AF42 por precedência de descarte no scheduler exigiria GRED com `dsmark`, que saiu do kernel na versão 6.3; AF42 fica como marca (visível nos contadores e para o controlador).
+
+**Testes E1** (`make e1`, ou `make e1 VNF=fw,cl` para só algumas): firewall bloqueia o atacante e deixa passar os clientes; cada classe chega com o DSCP certo e o DSCP dos hosts é apagado; o policer corta EF, remarca o vídeo em excesso e limita o bulk; com o gargalo cheio o VoIP e o vídeo ficam protegidos e a fila sai do gargalo.
+
+**Cenário C2:** `make cenario CONFIG=C2`, ou os três de seguida com `make cenario CONFIG=C0,C1,C2`.
+
+## Monitorização
+
+`make monitor` arranca o exportador (`monitor/exportador.py`) em `http://<vm>:9101/metrics`, no formato do Prometheus: contadores da firewall, de cada regra do classifier e do policer, das classes do scheduler, da fila do gargalo e das regras OpenFlow do ovs-sn. O Prometheus e o Grafana vêm a seguir, a ler daqui.
+
 ## Estrutura
 
 ```
 Vagrantfile               VM Ubuntu 24.04
 provision/provision.sh    instala CORE, OVS, Docker, ferramentas e módulos do kernel
-vnf/                      imagem base das VNFs (qosi/vnf) e vnf-transparente
+vnf/                      imagem das VNFs (qosi/vnf) e os scripts de cada função (vnf/bin)
 topologias/               cadeia_minima.py (validação) e topologia.py (topologia completa)
-testes/                   gerador de tráfego e medição (trafego.py)
+testes/                   gerador de tráfego (trafego.py) e testes E1 das VNFs (e1.py)
+monitor/                  exportador de métricas para o Prometheus
 scripts/                  verificação do ambiente e utilitários
 docs/                     proposta e notas
 ```

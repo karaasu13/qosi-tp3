@@ -178,7 +178,21 @@ def configurar_gargalo(modo: str = "C0", kbit: int = GARGALO_KBIT,
         sh(f"tc qdisc add dev {dev} parent 1:1 handle 10: {folha}")
 
 
+def esperar_ip(core, nome: str, ip: str, limite: float = 20) -> None:
+    """Espera que o CORE acabe de configurar o endereço `ip` no nó (o arranque é paralelo)."""
+    fim = time.time() + limite
+    while time.time() < fim:
+        rc, out = core.node_command(SESSAO, N[nome], "ip -4 -br addr", wait=True)
+        if rc == 0 and f"{ip}/" in out:
+            return
+        time.sleep(0.5)
+    _, out = core.node_command(SESSAO, N[nome], "ip -br addr; ip route", wait=True)
+    raise RuntimeError(f"{nome} não ficou com o endereço {ip} em {limite:.0f} s:\n{out}")
+
+
 def configurar(core):
+    for nome, ip in [("r1", "10.255.0.1"), ("r2", "10.255.0.2"), ("r2", "10.0.0.1")]:
+        esperar_ip(core, nome, ip)
     # rotas estáticas nos routers
     cmd(core, "r1", "ip route replace 10.0.0.0/24 via 10.255.0.2")
     cmd(core, "r2", "ip route replace default via 10.255.0.1")

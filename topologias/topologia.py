@@ -186,7 +186,7 @@ def esperar_ip(core, nome: str, ip: str, limite: float = 20) -> None:
         if rc == 0 and f"{ip}/" in out:
             return
         time.sleep(0.5)
-    _, out = core.node_command(SESSAO, N[nome], "ip -br addr; ip route", wait=True)
+    _, out = core.node_command(SESSAO, N[nome], "ip -br addr; ip route", wait=True, shell=True)
     raise RuntimeError(f"{nome} não ficou com o endereço {ip} em {limite:.0f} s:\n{out}")
 
 

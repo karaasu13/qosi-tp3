@@ -64,7 +64,8 @@ gui:
 	@/opt/core/venv/bin/python scripts/gui_config.py
 	core-gui -s $(SESSAO)
 
-TOPOLOGIA_LIGADA = /opt/core/venv/bin/python -c "from core.api.grpc import client; c=client.CoreGrpcClient(); c.connect(); exit(0 if any(s.id==$(SESSAO) for s in c.get_sessions()) else 1)"
+# a sessão existe e está completa (uma sessão que falhou a arrancar fica sem interfaces)
+TOPOLOGIA_LIGADA = sudo /opt/core/venv/bin/python -c "import sys; sys.path.insert(0, 'topologias'); import topologia as t; from core.api.grpc import client; c=client.CoreGrpcClient(); c.connect(); exit(0 if t.sessao_completa(c) else 1)"
 
 cenario:
 	@$(TOPOLOGIA_LIGADA) || $(MAKE) --no-print-directory topologia

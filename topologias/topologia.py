@@ -164,6 +164,13 @@ def regras_cadeia() -> dict:
     return p
 
 
+def sessao_completa(core) -> bool:
+    """A sessão existe e tem a rede montada (uma sessão que falhou a arrancar existe
+    no daemon mas fica sem interfaces)."""
+    existe = any(x.id == SESSAO for x in core.get_sessions())
+    return existe and Path(f"/sys/class/net/{gargalo_devs()[0]}").exists()
+
+
 def gargalo_devs() -> list:
     """Interfaces do gargalo: [descendente (ovs-sn → acesso), ascendente (sw-acesso → ovs-sn)]."""
     return [porta("ovs-sn", PORTA["acesso"]), porta("sw-acesso", 0)]

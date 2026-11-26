@@ -250,8 +250,8 @@ def main() -> int:
 
     core = client.CoreGrpcClient()
     core.connect()
-    if not any(s.id == topo.SESSAO for s in core.get_sessions()):
-        print("A topologia não está ligada: corre primeiro 'make topologia'.")
+    if not topo.sessao_completa(core):
+        print("A topologia não está ligada (ou ficou incompleta): corre 'make topologia'.")
         return 1
     nos = Nos(core)
 

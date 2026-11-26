@@ -28,7 +28,7 @@ import time
 from core.api.grpc import client
 from core.api.grpc.wrappers import Interface, NodeType, Position
 
-from ovs_util import desligar_ipv6_host, limpar_macs, ptp_como_fios, sh, short_id
+from ovs_util import desligar_ipv6_host, limpar_macs, limpar_restos, ptp_como_fios, sh, short_id
 
 SESSAO = 10
 IMAGEM_VNF = "qosi/vnf:latest"
@@ -63,6 +63,10 @@ def iface(i: int, ip: str = None, mask: int = 24, nome: str = None) -> Interface
 def construir(core: client.CoreGrpcClient):
     if any(s.id == SESSAO for s in core.get_sessions()):
         core.delete_session(SESSAO)
+        time.sleep(1)
+    restos = limpar_restos(SESSAO, VNFS)
+    if restos:
+        print(f"removidos restos de uma sessão anterior: {', '.join(restos)}")
     s = core.create_session(SESSAO)
     s.set_options({"ovs": "1"})
 
@@ -113,7 +117,13 @@ def construir(core: client.CoreGrpcClient):
         s.add_link(node1=nos[nome], node2=nos["sw-acesso"],
                    iface1=iface(0, f"10.0.0.{host}"), iface2=iface(k))
 
-    core.start_session(s)
+    _, erros = core.start_session(s)
+    # avisos do CORE ao arrancar (o que interessa é a última linha de cada erro;
+    # os de IPv6 aparecem em kernels sem IPv6 e não impedem a sessão de funcionar)
+    avisos = sorted({ln for e in erros for ln in e.strip().splitlines()[-1:]
+                     if ln and "ipv6/conf" not in ln})
+    if avisos:
+        print("avisos do CORE ao arrancar a sessão:\n  " + "\n  ".join(avisos))
     return s
 
 
@@ -187,7 +197,8 @@ def esperar_ip(core, nome: str, ip: str, limite: float = 20) -> None:
             return
         time.sleep(0.5)
     _, out = core.node_command(SESSAO, N[nome], "ip -br addr; ip route", wait=True, shell=True)
-    raise RuntimeError(f"{nome} não ficou com o endereço {ip} em {limite:.0f} s:\n{out}")
+    raise RuntimeError(f"{nome} não ficou com o endereço {ip} em {limite:.0f} s:\n{out}\n"
+                       "Vê os avisos do CORE acima; 'make limpar' remove restos de sessões antigas.")
 
 
 def configurar(core):

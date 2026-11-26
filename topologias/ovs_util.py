@@ -59,3 +59,29 @@ def ptp_como_fios(sid: int) -> int:
 
 def limpar_macs(br: str) -> None:
     sh(f"ovs-appctl fdb/flush {br}", check=False)
+
+
+def limpar_restos(sid: int, contentores: list) -> list:
+    """Remove o que uma sessão anterior com o mesmo id tenha deixado no host.
+
+    Depois de reiniciar a VM, o OVS guarda as bridges (a configuração fica em disco)
+    e o Docker guarda os contentores; com os mesmos nomes, a sessão nova falha.
+    """
+    suf = f".{short_id(sid)}"
+    feito = []
+    for br in sh("ovs-vsctl list-br", check=False).split():
+        if re.match(r"^[bp]\.\d+" + re.escape(suf) + "$", br):
+            sh(f"ovs-vsctl --if-exists del-br {br}", check=False)
+            feito.append(br)
+    for d in Path("/sys/class/net").iterdir():
+        if re.match(r"^(veth|beth)\d+\.\d+" + re.escape(suf) + "$", d.name):
+            sh(f"ip link del {d.name}", check=False)
+            feito.append(d.name)
+    for c in contentores:
+        if sh(f"docker ps -aq -f name=^{c}$", check=False):
+            sh(f"docker rm -f {c}", check=False)
+            feito.append(f"contentor {c}")
+    if Path(f"/tmp/pycore.{sid}").exists():
+        sh(f"rm -rf /tmp/pycore.{sid}", check=False)
+        feito.append(f"/tmp/pycore.{sid}")
+    return feito

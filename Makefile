@@ -91,7 +91,9 @@ monitor:
 	$(PY) monitor/exportador.py
 
 limpar:
+	-$(PY) topologias/topologia.py --parar
 	-sudo /opt/core/venv/bin/core-cleanup
 	-sudo docker rm -f vnf1 fw cl po sc
+	-for b in $$(sudo ovs-vsctl list-br | grep -E '^[bp]\.[0-9]+\.(a|5a)$$'); do sudo ovs-vsctl del-br $$b; done
 
 endif

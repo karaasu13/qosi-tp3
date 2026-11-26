@@ -143,16 +143,19 @@ class Teste:
         exc = dif["af41_excesso_af42"]["pacotes"]
         self.ok("po: vídeo acima de 5 Mbit/s remarcado AF42", exc > 0 and "0x90" in vistos,
                 f"{exc} pacotes remarcados; DSCP no cliente: {', '.join(sorted(vistos))}")
-        # bulk: um cliente sozinho não passa de ~3 Mbit/s
-        self.ex("cli-bulk1", f"iperf3 -c {IP['srv-web']} -p 5202 -R -t 5 -J > {d}/bulk.json")
+        # bulk: um cliente sozinho (2 fluxos, como no cenário) fica perto dos 3 Mbit/s
+        antes = cnt.regras(self.ex, "po")
+        self.ex("cli-bulk1", f"iperf3 -c {IP['srv-web']} -p 5202 -R -P 2 -t 6 -J > {d}/bulk.json")
         mbps, _ = trafego.mbps_iperf(d / "bulk.json")
-        self.ok("po: bulk limitado a ~3 Mbit/s por cliente", 1.5 < mbps < 3.4, f"{mbps:.2f} Mbit/s")
+        desc = cnt.diferenca(cnt.regras(self.ex, "po"), antes)["le_cli_bulk1"]["descartes"]
+        self.ok("po: bulk limitado a ~3 Mbit/s por cliente", 2.2 < mbps < 3.4,
+                f"{mbps:.2f} Mbit/s, {desc} descartados no policer")
 
     # -------------------------------------------------------------- scheduler
     def sc(self):
-        antes = cnt.scheduler(self.ex)
+        # o cenário reconfigura o scheduler no arranque (contadores a zero): lê-se no fim
         m = trafego.correr(self.nos, "C2", 15, self._dir("sc_c2"))
-        dif = cnt.diferenca(cnt.scheduler(self.ex), antes)
+        dif = cnt.scheduler(self.ex)
         self.ok("sc: cada classe na sua fila HTB",
                 all(dif.get(c, {}).get("pacotes", 0) > 0 for c in ("ef", "af4", "be", "le")),
                 " ".join(f"{c}:{dif.get(c, {}).get('pacotes', 0)}" for c in ("ef", "af4", "be", "le")))

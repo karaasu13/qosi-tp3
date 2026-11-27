@@ -19,6 +19,10 @@ Uso (na VM, com o core-daemon ativo):
     sudo /opt/core/venv/bin/python topologias/topologia.py --parar   # apaga a sessão
 """
 
+import os
+
+os.environ.setdefault("GRPC_VERBOSITY", "ERROR")  # sem avisos GOAWAY/ping_timeout do gRPC
+
 import argparse
 import re
 import sys

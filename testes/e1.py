@@ -15,6 +15,10 @@ fim volta a pô-las em modo transparente.
     sudo /opt/core/venv/bin/python testes/e1.py --vnf fw,cl
 """
 
+import os
+
+os.environ.setdefault("GRPC_VERBOSITY", "ERROR")  # sem avisos GOAWAY/ping_timeout do gRPC
+
 import argparse
 import json
 import re

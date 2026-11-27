@@ -15,6 +15,10 @@ Precisa da topologia ligada (make topologia). Uso, na VM:
     sudo /opt/core/venv/bin/python testes/trafego.py --config C0,C1 --duracao 60 --repeticoes 5
 """
 
+import os
+
+os.environ.setdefault("GRPC_VERBOSITY", "ERROR")  # sem avisos GOAWAY/ping_timeout do gRPC
+
 import argparse
 import csv
 import json

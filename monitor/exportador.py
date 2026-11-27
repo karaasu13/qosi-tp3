@@ -11,6 +11,10 @@ Corre no host da VM, fora do caminho dos pacotes, e lê a cada pedido:
     sudo /opt/core/venv/bin/python monitor/exportador.py --uma-vez  # imprime e sai
 """
 
+import os
+
+os.environ.setdefault("GRPC_VERBOSITY", "ERROR")  # sem avisos GOAWAY/ping_timeout do gRPC
+
 import argparse
 import json
 import re
